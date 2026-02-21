@@ -35,6 +35,15 @@ jobs:
       - name: Install dependencies
         run: ${{ matrix.install_deps }}
 
+      - name: Install system libairspyhf
+        run: |
+          cmake -S libairspyhf -B build-lib -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-lib --parallel
+          sudo cmake --install build-lib
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            sudo ldconfig
+          fi
+
       - name: Configure
         run: cmake -S . -B build-ci ${{ matrix.cmake_args }}
 
