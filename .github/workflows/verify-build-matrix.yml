@@ -13,8 +13,8 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            name: Ubuntu (udev rules)
-            cmake_args: -DINSTALL_UDEV_RULES=ON
+            name: Ubuntu
+            cmake_args: ""
             install_deps: |
               sudo apt-get update
               sudo apt-get install -y build-essential cmake libusb-1.0-0-dev libzmq3-dev pkg-config
