@@ -55,6 +55,7 @@ You must also provide a system `libairspyhf` on macOS (package manager or local 
 ### Recommended (Makefile wrapper)
 
 ```bash
+git submodule update --init --recursive
 make
 ```
 
@@ -69,6 +70,7 @@ sudo make install
 ### Raw CMake
 
 ```bash
+git submodule update --init --recursive
 cmake -S . -B build
 cmake --build build --parallel
 ```

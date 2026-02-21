@@ -37,6 +37,7 @@
 
 #include <airspyhf.h>
 #include <zmq.h>
+#include <tagtracker_wireformat/zmq_iq_packet.h>
 
 #if !defined __cplusplus
 #if __STDC_VERSION__ < 202311L
@@ -199,45 +200,6 @@ void* zmq_context = NULL;
 void* zmq_pub_socket = NULL;
 uint64_t zmq_sequence = 0;
 uint32_t current_sample_rate = 0;
-
-#define AIRSPYHF_ZMQ_MAGIC 0x5a514941u
-#define AIRSPYHF_ZMQ_VERSION 1u
-#define AIRSPYHF_ZMQ_HEADER_SIZE 40u
-
-#ifdef _MSC_VER
-#pragma pack(push, 1)
-typedef struct
-{
-	uint32_t magic;
-	uint16_t version;
-	uint16_t header_size;
-	uint64_t sequence;
-	uint64_t timestamp_us;
-	uint32_t sample_rate;
-	uint32_t sample_count;
-	uint32_t payload_bytes;
-	uint32_t flags;
-} t_airspyhf_zmq_packet_hdr;
-#pragma pack(pop)
-#else
-typedef struct __attribute__((packed))
-{
-	uint32_t magic;
-	uint16_t version;
-	uint16_t header_size;
-	uint64_t sequence;
-	uint64_t timestamp_us;
-	uint32_t sample_rate;
-	uint32_t sample_count;
-	uint32_t payload_bytes;
-	uint32_t flags;
-} t_airspyhf_zmq_packet_hdr;
-#endif
-
-#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
-_Static_assert(sizeof(t_airspyhf_zmq_packet_hdr) == AIRSPYHF_ZMQ_HEADER_SIZE,
-	"ZeroMQ packet header must be exactly 40 bytes");
-#endif
 
 
 static float
@@ -405,29 +367,34 @@ int rx_callback(airspyhf_transfer_t* transfer)
 
 		if(pt_rx_buffer) {
 			if (use_zmq_output) {
-				t_airspyhf_zmq_packet_hdr packet_hdr;
+				ttwf_zmq_iq_packet_header_t packet_hdr;
 				zmq_msg_t msg;
 				size_t total_message_size;
 				void* message_data;
 
-				packet_hdr.magic = AIRSPYHF_ZMQ_MAGIC;
-				packet_hdr.version = AIRSPYHF_ZMQ_VERSION;
-				packet_hdr.header_size = AIRSPYHF_ZMQ_HEADER_SIZE;
+				packet_hdr.magic = TTWF_ZMQ_IQ_MAGIC;
+				packet_hdr.version = TTWF_ZMQ_IQ_VERSION;
+				packet_hdr.header_size = TTWF_ZMQ_IQ_HEADER_SIZE;
 				packet_hdr.sequence = zmq_sequence++;
 				packet_hdr.timestamp_us = get_time_us();
 				packet_hdr.sample_rate = current_sample_rate;
 				packet_hdr.sample_count = bytes_to_write / (4 * 2);
 				packet_hdr.payload_bytes = bytes_to_write;
-				packet_hdr.flags = ((limit_num_samples == true) && (bytes_to_xfer == 0)) ? 1u : 0u;
+				packet_hdr.flags = ((limit_num_samples == true) && (bytes_to_xfer == 0)) ? TTWF_ZMQ_IQ_FLAG_FINAL_CHUNK : 0u;
 
-				total_message_size = AIRSPYHF_ZMQ_HEADER_SIZE + bytes_to_write;
+				total_message_size = TTWF_ZMQ_IQ_HEADER_SIZE + bytes_to_write;
 				if (zmq_msg_init_size(&msg, total_message_size) != 0) {
 					return -1;
 				}
 
 				message_data = zmq_msg_data(&msg);
-				memcpy(message_data, &packet_hdr, AIRSPYHF_ZMQ_HEADER_SIZE);
-				memcpy((uint8_t*)message_data + AIRSPYHF_ZMQ_HEADER_SIZE, pt_rx_buffer, bytes_to_write);
+				if (ttwf_encode_zmq_iq_header((uint8_t*)message_data,
+						total_message_size,
+						&packet_hdr) != TTWF_ZMQ_OK) {
+					zmq_msg_close(&msg);
+					return -1;
+				}
+				memcpy((uint8_t*)message_data + TTWF_ZMQ_IQ_HEADER_SIZE, pt_rx_buffer, bytes_to_write);
 
 				bytes_written = zmq_msg_send(&msg, zmq_pub_socket, 0);
 				expected_bytes_written = (ssize_t)total_message_size;

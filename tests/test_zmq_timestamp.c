@@ -8,78 +8,12 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <tagtracker_wireformat/zmq_iq_packet.h>
 #include <zmq.h>
 
-#define AIRSPYHF_ZMQ_MAGIC 0x5a514941u
-#define AIRSPYHF_ZMQ_VERSION 1u
-#define AIRSPYHF_ZMQ_HEADER_SIZE 40u
 #define TEST_HOST "127.0.0.1"
 #define TEST_PORT_BASE 23000u
 #define REQUIRED_PACKETS 8
-
-enum
-{
-    HDR_OFF_MAGIC = 0,
-    HDR_OFF_VERSION = 4,
-    HDR_OFF_HEADER_SIZE = 6,
-    HDR_OFF_SEQUENCE = 8,
-    HDR_OFF_TIMESTAMP_US = 16,
-    HDR_OFF_SAMPLE_RATE = 24,
-    HDR_OFF_SAMPLE_COUNT = 28,
-    HDR_OFF_PAYLOAD_BYTES = 32,
-    HDR_OFF_FLAGS = 36
-};
-
-typedef struct
-{
-    uint32_t magic;
-    uint16_t version;
-    uint16_t header_size;
-    uint64_t sequence;
-    uint64_t timestamp_us;
-    uint32_t sample_rate;
-    uint32_t sample_count;
-    uint32_t payload_bytes;
-    uint32_t flags;
-} airspyhf_zmq_packet_hdr_t;
-
-static uint16_t read_u16_le(const uint8_t* p)
-{
-    return (uint16_t)p[0] | ((uint16_t)p[1] << 8);
-}
-
-static uint32_t read_u32_le(const uint8_t* p)
-{
-    return (uint32_t)p[0] |
-           ((uint32_t)p[1] << 8) |
-           ((uint32_t)p[2] << 16) |
-           ((uint32_t)p[3] << 24);
-}
-
-static uint64_t read_u64_le(const uint8_t* p)
-{
-    return (uint64_t)p[0] |
-           ((uint64_t)p[1] << 8) |
-           ((uint64_t)p[2] << 16) |
-           ((uint64_t)p[3] << 24) |
-           ((uint64_t)p[4] << 32) |
-           ((uint64_t)p[5] << 40) |
-           ((uint64_t)p[6] << 48) |
-           ((uint64_t)p[7] << 56);
-}
-
-static void parse_header(const uint8_t* data, airspyhf_zmq_packet_hdr_t* hdr)
-{
-    hdr->magic = read_u32_le(data + HDR_OFF_MAGIC);
-    hdr->version = read_u16_le(data + HDR_OFF_VERSION);
-    hdr->header_size = read_u16_le(data + HDR_OFF_HEADER_SIZE);
-    hdr->sequence = read_u64_le(data + HDR_OFF_SEQUENCE);
-    hdr->timestamp_us = read_u64_le(data + HDR_OFF_TIMESTAMP_US);
-    hdr->sample_rate = read_u32_le(data + HDR_OFF_SAMPLE_RATE);
-    hdr->sample_count = read_u32_le(data + HDR_OFF_SAMPLE_COUNT);
-    hdr->payload_bytes = read_u32_le(data + HDR_OFF_PAYLOAD_BYTES);
-    hdr->flags = read_u32_le(data + HDR_OFF_FLAGS);
-}
 
 static int child_running(pid_t pid)
 {
@@ -190,7 +124,7 @@ int main(int argc, char** argv)
 
     while (received_packets < REQUIRED_PACKETS) {
         zmq_msg_t msg;
-        airspyhf_zmq_packet_hdr_t hdr;
+        ttwf_zmq_iq_packet_header_t hdr;
         const void* msg_data;
         size_t msg_size;
 
@@ -218,8 +152,9 @@ int main(int argc, char** argv)
         msg_data = zmq_msg_data(&msg);
         msg_size = zmq_msg_size(&msg);
 
-        if (msg_size < AIRSPYHF_ZMQ_HEADER_SIZE) {
-            fprintf(stderr, "Message too short: %zu\n", msg_size);
+        rc = ttwf_validate_zmq_iq_frame((const uint8_t*)msg_data, msg_size, &hdr);
+        if (rc != TTWF_ZMQ_OK) {
+            fprintf(stderr, "Invalid frame rc=%d size=%zu\n", rc, msg_size);
             zmq_msg_close(&msg);
             stop_child(rx_pid);
             zmq_close(sub);
@@ -227,9 +162,7 @@ int main(int argc, char** argv)
             return EXIT_FAILURE;
         }
 
-        parse_header((const uint8_t*)msg_data, &hdr);
-
-        if (hdr.magic != AIRSPYHF_ZMQ_MAGIC) {
+        if (hdr.magic != TTWF_ZMQ_IQ_MAGIC) {
             fprintf(stderr, "Bad magic: 0x%08x\n", hdr.magic);
             zmq_msg_close(&msg);
             stop_child(rx_pid);
@@ -238,7 +171,7 @@ int main(int argc, char** argv)
             return EXIT_FAILURE;
         }
 
-        if (hdr.version != AIRSPYHF_ZMQ_VERSION) {
+        if (hdr.version != TTWF_ZMQ_IQ_VERSION) {
             fprintf(stderr, "Bad version: %u\n", hdr.version);
             zmq_msg_close(&msg);
             stop_child(rx_pid);
@@ -247,7 +180,7 @@ int main(int argc, char** argv)
             return EXIT_FAILURE;
         }
 
-        if (hdr.header_size != AIRSPYHF_ZMQ_HEADER_SIZE) {
+        if (hdr.header_size != TTWF_ZMQ_IQ_HEADER_SIZE) {
             fprintf(stderr, "Bad header_size: %u\n", hdr.header_size);
             zmq_msg_close(&msg);
             stop_child(rx_pid);
@@ -256,7 +189,7 @@ int main(int argc, char** argv)
             return EXIT_FAILURE;
         }
 
-        if ((size_t)hdr.payload_bytes + AIRSPYHF_ZMQ_HEADER_SIZE != msg_size) {
+        if ((size_t)hdr.payload_bytes + TTWF_ZMQ_IQ_HEADER_SIZE != msg_size) {
             fprintf(stderr, "payload size mismatch: payload=%u msg=%zu\n", hdr.payload_bytes, msg_size);
             zmq_msg_close(&msg);
             stop_child(rx_pid);
