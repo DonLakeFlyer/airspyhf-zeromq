@@ -225,9 +225,16 @@ TimevalDiff(const struct timeval *a, const struct timeval *b)
 
 static uint64_t get_time_us(void)
 {
-	struct timeval time_now;
-	gettimeofday(&time_now, NULL);
-	return ((uint64_t)time_now.tv_sec * 1000000ull) + (uint64_t)time_now.tv_usec;
+	struct timespec time_now;
+	if (clock_gettime(CLOCK_MONOTONIC, &time_now) == 0) {
+		return ((uint64_t)time_now.tv_sec * 1000000ull) + ((uint64_t)time_now.tv_nsec / 1000ull);
+	}
+
+	{
+		struct timeval fallback_time;
+		gettimeofday(&fallback_time, NULL);
+		return ((uint64_t)fallback_time.tv_sec * 1000000ull) + (uint64_t)fallback_time.tv_usec;
+	}
 }
 
 int parse_u64(char* s, uint64_t* const value) {
@@ -797,6 +804,7 @@ int main(int argc, char** argv)
 	if (use_zmq_output) {
 		char zmq_endpoint[256];
 		int zmq_sndhwm = 32;
+		int zmq_linger = 0;
 
 		snprintf(zmq_endpoint, sizeof(zmq_endpoint), "tcp://%s:%u", zmq_host, zmq_port);
 
@@ -814,6 +822,11 @@ int main(int argc, char** argv)
 
 		if (zmq_setsockopt(zmq_pub_socket, ZMQ_SNDHWM, &zmq_sndhwm, sizeof(zmq_sndhwm)) != 0) {
 			fprintf(stderr, "zmq_setsockopt(ZMQ_SNDHWM) failed: %s\n", zmq_strerror(errno));
+			goto exit_failure;
+		}
+
+		if (zmq_setsockopt(zmq_pub_socket, ZMQ_LINGER, &zmq_linger, sizeof(zmq_linger)) != 0) {
+			fprintf(stderr, "zmq_setsockopt(ZMQ_LINGER) failed: %s\n", zmq_strerror(errno));
 			goto exit_failure;
 		}
 

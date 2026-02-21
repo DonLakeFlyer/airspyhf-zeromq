@@ -48,7 +48,7 @@ Debug version:
 ### Prerequisites for Linux (Debian/Ubuntu/Raspbian):
 
 
-`sudo apt-get install build-essential cmake libusb-1.0-0-dev libzmq3-dev pkg-config`
+`sudo apt-get install build-essential cmake libusb-1.0-0-dev libzmq3-dev pkg-config libairspyhf-dev`
 
 
 ### Build host software on Linux:

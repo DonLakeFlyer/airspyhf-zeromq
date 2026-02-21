@@ -51,4 +51,4 @@ endif()
 LIST(APPEND TOOLS_LINK_LIBS -lm)
 
 target_link_libraries(airspyhf_zeromq_rx ${TOOLS_LINK_LIBS})
-target_link_libraries(airspyhf_zeromq_rx ${PC_ZMQ_LDFLAGS})
+target_link_libraries(airspyhf_zeromq_rx PkgConfig::PC_ZMQ)

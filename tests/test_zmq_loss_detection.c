@@ -12,7 +12,8 @@
 
 #define AIRSPYHF_ZMQ_MAGIC 0x5a514941u
 #define AIRSPYHF_ZMQ_VERSION 1u
-#define TEST_ENDPOINT "tcp://127.0.0.1:5555"
+#define TEST_HOST "127.0.0.1"
+#define TEST_PORT_BASE 33000u
 #define REQUIRED_PACKETS 8
 
 typedef struct
@@ -70,6 +71,9 @@ int main(int argc, char** argv)
     int received_packets = 0;
     uint64_t prev_sequence = 0;
     uint64_t total_missing = 0;
+    uint16_t test_port = (uint16_t)(TEST_PORT_BASE + ((unsigned)getpid() % 10000u));
+    char test_port_str[8];
+    char test_endpoint[64];
 
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <path-to-airspyhf_zeromq_rx>\n", argv[0]);
@@ -83,10 +87,13 @@ int main(int argc, char** argv)
     }
 
     if (rx_pid == 0) {
-        execl(argv[1], argv[1], "-f", "146", "-g", "off", "-t", "0", "-m", "on", (char*)NULL);
+        snprintf(test_port_str, sizeof(test_port_str), "%u", (unsigned)test_port);
+        execl(argv[1], argv[1], "-f", "146", "-g", "off", "-t", "0", "-m", "on", "-I", TEST_HOST, "-P", test_port_str, (char*)NULL);
         perror("execl");
         _exit(127);
     }
+
+    snprintf(test_endpoint, sizeof(test_endpoint), "tcp://%s:%u", TEST_HOST, (unsigned)test_port);
 
     zmq_ctx = zmq_ctx_new();
     if (zmq_ctx == NULL) {
@@ -121,9 +128,9 @@ int main(int argc, char** argv)
         return EXIT_FAILURE;
     }
 
-    rc = zmq_connect(sub, TEST_ENDPOINT);
+    rc = zmq_connect(sub, test_endpoint);
     if (rc != 0) {
-        fprintf(stderr, "zmq_connect(%s) failed: %s\n", TEST_ENDPOINT, zmq_strerror(errno));
+        fprintf(stderr, "zmq_connect(%s) failed: %s\n", test_endpoint, zmq_strerror(errno));
         stop_child(rx_pid);
         zmq_close(sub);
         zmq_ctx_term(zmq_ctx);
