@@ -157,7 +157,7 @@ int main(int argc, char** argv)
 
         rc = ttwf_validate_zmq_iq_frame((const uint8_t*)msg_data, msg_size, &hdr);
         if (rc != TTWF_ZMQ_OK) {
-            fprintf(stderr, "Invalid packet header rc=%d\n", rc);
+            fprintf(stderr, "Invalid packet header rc=%d msg_size=%zu\n", rc, msg_size);
             zmq_msg_close(&msg);
             stop_child(rx_pid);
             zmq_close(sub);
