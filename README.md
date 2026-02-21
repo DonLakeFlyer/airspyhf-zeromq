@@ -4,9 +4,9 @@
 
 ## Related repositories
 
-- AirspyHFDecimate: https://github.com/DonLakeFlyer/AirspyHFDecimate
-- ZeroMQ IQ source (`airspyhf_zeromq_rx`): https://github.com/DonLakeFlyer/airspyhf-zeromq
-- MAVLink controller (`MavlinkTagController2`): https://github.com/DonLakeFlyer/MavlinkTagController2
+- AirspyHFDecimate: [https://github.com/DonLakeFlyer/AirspyHFDecimate](https://github.com/DonLakeFlyer/AirspyHFDecimate)
+- airspyhf-zeromq: [https://github.com/DonLakeFlyer/airspyhf-zeromq](https://github.com/DonLakeFlyer/airspyhf-zeromq)
+- MavlinkTagController2: [https://github.com/DonLakeFlyer/MavlinkTagController2](https://github.com/DonLakeFlyer/MavlinkTagController2)
 
 Protocol, packet-format, timing, and sample-rate assumption changes must be coordinated across all three repositories.
 
