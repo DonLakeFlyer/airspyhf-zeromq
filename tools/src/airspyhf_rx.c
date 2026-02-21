@@ -202,7 +202,10 @@ uint32_t current_sample_rate = 0;
 
 #define AIRSPYHF_ZMQ_MAGIC 0x5a514941u
 #define AIRSPYHF_ZMQ_VERSION 1u
+#define AIRSPYHF_ZMQ_HEADER_SIZE 40u
 
+#ifdef _MSC_VER
+#pragma pack(push, 1)
 typedef struct
 {
 	uint32_t magic;
@@ -215,6 +218,26 @@ typedef struct
 	uint32_t payload_bytes;
 	uint32_t flags;
 } t_airspyhf_zmq_packet_hdr;
+#pragma pack(pop)
+#else
+typedef struct __attribute__((packed))
+{
+	uint32_t magic;
+	uint16_t version;
+	uint16_t header_size;
+	uint64_t sequence;
+	uint64_t timestamp_us;
+	uint32_t sample_rate;
+	uint32_t sample_count;
+	uint32_t payload_bytes;
+	uint32_t flags;
+} t_airspyhf_zmq_packet_hdr;
+#endif
+
+#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
+_Static_assert(sizeof(t_airspyhf_zmq_packet_hdr) == AIRSPYHF_ZMQ_HEADER_SIZE,
+	"ZeroMQ packet header must be exactly 40 bytes");
+#endif
 
 
 static float
@@ -389,7 +412,7 @@ int rx_callback(airspyhf_transfer_t* transfer)
 
 				packet_hdr.magic = AIRSPYHF_ZMQ_MAGIC;
 				packet_hdr.version = AIRSPYHF_ZMQ_VERSION;
-				packet_hdr.header_size = sizeof(t_airspyhf_zmq_packet_hdr);
+				packet_hdr.header_size = AIRSPYHF_ZMQ_HEADER_SIZE;
 				packet_hdr.sequence = zmq_sequence++;
 				packet_hdr.timestamp_us = get_time_us();
 				packet_hdr.sample_rate = current_sample_rate;
@@ -397,14 +420,14 @@ int rx_callback(airspyhf_transfer_t* transfer)
 				packet_hdr.payload_bytes = bytes_to_write;
 				packet_hdr.flags = ((limit_num_samples == true) && (bytes_to_xfer == 0)) ? 1u : 0u;
 
-				total_message_size = sizeof(t_airspyhf_zmq_packet_hdr) + bytes_to_write;
+				total_message_size = AIRSPYHF_ZMQ_HEADER_SIZE + bytes_to_write;
 				if (zmq_msg_init_size(&msg, total_message_size) != 0) {
 					return -1;
 				}
 
 				message_data = zmq_msg_data(&msg);
-				memcpy(message_data, &packet_hdr, sizeof(t_airspyhf_zmq_packet_hdr));
-				memcpy((uint8_t*)message_data + sizeof(t_airspyhf_zmq_packet_hdr), pt_rx_buffer, bytes_to_write);
+				memcpy(message_data, &packet_hdr, AIRSPYHF_ZMQ_HEADER_SIZE);
+				memcpy((uint8_t*)message_data + AIRSPYHF_ZMQ_HEADER_SIZE, pt_rx_buffer, bytes_to_write);
 
 				bytes_written = zmq_msg_send(&msg, zmq_pub_socket, 0);
 				expected_bytes_written = (ssize_t)total_message_size;

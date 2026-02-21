@@ -16,14 +16,21 @@ jobs:
             name: Ubuntu
             cmake_args: ""
             install_deps: |
+              set -euxo pipefail
               sudo apt-get update
               sudo apt-get install -y build-essential cmake libusb-1.0-0-dev libzmq3-dev pkg-config
+              pkg-config --exists libzmq
+              pkg-config --modversion libzmq
           - os: macos-latest
             name: macOS
             cmake_args: ""
             install_deps: |
+              set -euxo pipefail
               brew update
               brew install libusb zeromq pkg-config
+              echo "PKG_CONFIG_PATH=$(brew --prefix zeromq)/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
+              pkg-config --exists libzmq
+              pkg-config --modversion libzmq
 
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}

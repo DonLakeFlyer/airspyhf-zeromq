@@ -2,6 +2,14 @@
 
 `airspyhf_zeromq_rx` is a single-purpose receiver that streams Airspy HF+ IQ data over ZeroMQ PUB.
 
+## Related repositories
+
+- AirspyHFDecimate: https://github.com/DonLakeFlyer/AirspyHFDecimate
+- ZeroMQ IQ source (`airspyhf_zeromq_rx`): https://github.com/DonLakeFlyer/airspyhf-zeromq
+- MAVLink controller (`MavlinkTagController2`): https://github.com/DonLakeFlyer/MavlinkTagController2
+
+Protocol, packet-format, timing, and sample-rate assumption changes must be coordinated across all three repositories.
+
 ## What this repo builds
 
 This project builds one executable:
@@ -129,6 +137,7 @@ Each PUB message is:
 - `uint32 flags`
 
 Header size is currently 40 bytes.
+The wire header is a packed, fixed-size layout with no compiler padding between fields.
 
 ### Semantics
 
