@@ -4,7 +4,7 @@ This repository is part of a 3-repo signal pipeline. Keep code and docs aligned 
 
 1. AirspyHFDecimate
    - https://github.com/DonLakeFlyer/AirspyHFDecimate
-2. airspyhf-zeromq (this repo)
+2. airspyhf-zeromq
    - https://github.com/DonLakeFlyer/airspyhf-zeromq
 3. MavlinkTagController2
    - https://github.com/DonLakeFlyer/MavlinkTagController2
