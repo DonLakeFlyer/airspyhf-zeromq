@@ -11,6 +11,7 @@ add_dependencies(test_zmq_timestamp airspyhf_zeromq_rx)
 
 add_executable(test_zmq_loss_detection test_zmq_loss_detection.c)
 target_include_directories(test_zmq_loss_detection PRIVATE ${PC_ZMQ_TEST_INCLUDE_DIRS})
+target_include_directories(test_zmq_loss_detection PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../TagTrackerWireFormat/include)
 target_compile_options(test_zmq_loss_detection PRIVATE ${PC_ZMQ_TEST_CFLAGS_OTHER})
 target_link_libraries(test_zmq_loss_detection ${PC_ZMQ_TEST_LDFLAGS})
 
