@@ -3,13 +3,23 @@
 cmake_minimum_required(VERSION 3.12)
 project (airspyhf_all)
 
+if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Build type" FORCE)
+endif()
+
+include(CTest)
+
 #provide missing strtoull() for VC11
 if(MSVC11)
     add_definitions(-Dstrtoull=_strtoui64)
 endif(MSVC11)
 
-add_subdirectory(libairspyhf)
+message(STATUS "Using system libairspyhf")
 add_subdirectory(tools)
+
+if(BUILD_TESTING)
+    add_subdirectory(tests)
+endif()
 ########################################################################
 # Create uninstall target
 ########################################################################

@@ -30,7 +30,6 @@ set(VERSION_STRING ${MAJOR_VERSION}.${MINOR_VERSION})
 set(VERSION ${VERSION_STRING})
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/../cmake/modules)
 set(CMAKE_C_FLAGS_RELEASE "-O2")
-set(CMAKE_BUILD_TYPE Release)
 add_definitions(-D_FILE_OFFSET_BITS=64)
 
 if(MSVC)
@@ -46,6 +45,11 @@ include_directories(${LIBAIRSPYHF_INCLUDE_DIR})
 else()
 include_directories(${libairspyhf_SOURCE_DIR}/src)
 endif()
+
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(PC_ZMQ REQUIRED IMPORTED_TARGET libzmq)
+include_directories(${PC_ZMQ_INCLUDE_DIRS})
+add_definitions(${PC_ZMQ_CFLAGS_OTHER})
 
 add_subdirectory(src)
 
@@ -70,7 +74,7 @@ endif()
 ########################################################################
 set(REMOTE_USER_GROUP "plugdev")
 set(RULE_TEXT "ATTR{idVendor}==\"03eb\", ATTR{idProduct}==\"800c\", SYMLINK+=\"airspyhf-%k\", MODE=\"660\", GROUP=\"${REMOTE_USER_GROUP}\"")
-option(USE_UACCESS_RULES "Install udev uaccess rules" OFF)
+option(USE_UACCESS_RULES "Install udev uaccess rules" ON)
 option(INSTALL_UDEV_RULES "Install udev rules for AirSpy HF+" OFF)
 
 if (USE_UACCESS_RULES)

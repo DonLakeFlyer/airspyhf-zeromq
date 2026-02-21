@@ -1,0 +1,51 @@
+name: Verify Build Matrix
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: Ubuntu
+            cmake_args: ""
+            install_deps: |
+              sudo apt-get update
+              sudo apt-get install -y build-essential cmake libusb-1.0-0-dev libzmq3-dev pkg-config
+          - os: macos-latest
+            name: macOS
+            cmake_args: ""
+            install_deps: |
+              brew update
+              brew install libusb zeromq pkg-config
+
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: ${{ matrix.install_deps }}
+
+      - name: Install system libairspyhf
+        run: |
+          cmake -S libairspyhf -B build-lib -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-lib --parallel
+          sudo cmake --install build-lib
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            sudo ldconfig
+          fi
+
+      - name: Configure
+        run: cmake -S . -B build-ci ${{ matrix.cmake_args }}
+
+      - name: Build
+        run: cmake --build build-ci --parallel
