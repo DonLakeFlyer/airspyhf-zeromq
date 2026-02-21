@@ -31,6 +31,9 @@ add_library(libgetopt_static STATIC
 endif()
 
 add_executable(airspyhf_zeromq_rx airspyhf_rx.c)
+target_include_directories(airspyhf_zeromq_rx PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../TagTrackerWireFormat/include
+)
 install(TARGETS airspyhf_zeromq_rx RUNTIME DESTINATION ${INSTALL_DEFAULT_BINDIR})
 
 set_target_properties(airspyhf_zeromq_rx PROPERTIES
