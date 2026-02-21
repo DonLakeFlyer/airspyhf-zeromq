@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <getopt.h>
 #include <time.h>
 
@@ -35,6 +36,7 @@
 #include <limits.h>
 
 #include <airspyhf.h>
+#include <zmq.h>
 
 #if !defined __cplusplus
 #if __STDC_VERSION__ < 202311L
@@ -190,11 +192,42 @@ uint32_t rate_samples = 0;
 uint32_t buffer_count = 0;
 uint32_t sample_count = 0;
 
+bool use_zmq_output = true;
+char zmq_host[128] = "127.0.0.1";
+uint16_t zmq_port = 5555;
+void* zmq_context = NULL;
+void* zmq_pub_socket = NULL;
+uint64_t zmq_sequence = 0;
+uint32_t current_sample_rate = 0;
+
+#define AIRSPYHF_ZMQ_MAGIC 0x5a514941u
+#define AIRSPYHF_ZMQ_VERSION 1u
+
+typedef struct
+{
+	uint32_t magic;
+	uint16_t version;
+	uint16_t header_size;
+	uint64_t sequence;
+	uint64_t timestamp_us;
+	uint32_t sample_rate;
+	uint32_t sample_count;
+	uint32_t payload_bytes;
+	uint32_t flags;
+} t_airspyhf_zmq_packet_hdr;
+
 
 static float
 TimevalDiff(const struct timeval *a, const struct timeval *b)
 {
 	return (a->tv_sec - b->tv_sec) + 1e-6f * (a->tv_usec - b->tv_usec);
+}
+
+static uint64_t get_time_us(void)
+{
+	struct timeval time_now;
+	gettimeofday(&time_now, NULL);
+	return ((uint64_t)time_now.tv_sec * 1000000ull) + (uint64_t)time_now.tv_usec;
 }
 
 int parse_u64(char* s, uint64_t* const value) {
@@ -303,10 +336,11 @@ int rx_callback(airspyhf_transfer_t* transfer)
 	uint32_t bytes_to_write;
 	void* pt_rx_buffer;
 	ssize_t bytes_written;
+	ssize_t expected_bytes_written;
 	struct timeval time_now;
 	float time_difference, rate;
 
-	if( fd ) {
+	if( fd || zmq_pub_socket ) {
 		// #sample * float size * I+Q
 		bytes_to_write = transfer->sample_count * 4 * 2;
 		pt_rx_buffer = transfer->samples;
@@ -340,11 +374,43 @@ int rx_callback(airspyhf_transfer_t* transfer)
 		}
 
 		if(pt_rx_buffer) {
-			bytes_written = fwrite(pt_rx_buffer, 1, bytes_to_write, fd);
+			if (use_zmq_output) {
+				t_airspyhf_zmq_packet_hdr packet_hdr;
+				zmq_msg_t msg;
+				size_t total_message_size;
+				void* message_data;
+
+				packet_hdr.magic = AIRSPYHF_ZMQ_MAGIC;
+				packet_hdr.version = AIRSPYHF_ZMQ_VERSION;
+				packet_hdr.header_size = sizeof(t_airspyhf_zmq_packet_hdr);
+				packet_hdr.sequence = zmq_sequence++;
+				packet_hdr.timestamp_us = get_time_us();
+				packet_hdr.sample_rate = current_sample_rate;
+				packet_hdr.sample_count = bytes_to_write / (4 * 2);
+				packet_hdr.payload_bytes = bytes_to_write;
+				packet_hdr.flags = ((limit_num_samples == true) && (bytes_to_xfer == 0)) ? 1u : 0u;
+
+				total_message_size = sizeof(t_airspyhf_zmq_packet_hdr) + bytes_to_write;
+				if (zmq_msg_init_size(&msg, total_message_size) != 0) {
+					return -1;
+				}
+
+				message_data = zmq_msg_data(&msg);
+				memcpy(message_data, &packet_hdr, sizeof(t_airspyhf_zmq_packet_hdr));
+				memcpy((uint8_t*)message_data + sizeof(t_airspyhf_zmq_packet_hdr), pt_rx_buffer, bytes_to_write);
+
+				bytes_written = zmq_msg_send(&msg, zmq_pub_socket, 0);
+				expected_bytes_written = (ssize_t)total_message_size;
+				zmq_msg_close(&msg);
+			} else {
+				bytes_written = fwrite(pt_rx_buffer, 1, bytes_to_write, fd);
+				expected_bytes_written = (ssize_t)bytes_to_write;
+			}
 		} else {
 			bytes_written = 0;
+			expected_bytes_written = 0;
 		}
-		if  ( (bytes_written != bytes_to_write) ||
+		if  ( (bytes_written != expected_bytes_written) ||
 			  ((limit_num_samples == true) && (bytes_to_xfer == 0))
 			)
 			return -1;
@@ -358,11 +424,15 @@ int rx_callback(airspyhf_transfer_t* transfer)
 static void usage(void)
 {
 	fprintf(stderr,
-	"airspyhf_rx\n"
+	"airspyhf_zeromq_rx\n"
 	"Usage:\n"
 
 	"\t-r <filename>\t\tReceive data into the file;\n"
 	"\t\t\t\tstdout emits values on standard output\n"
+	"\t-Z\t\t\tPublish IQ blocks over ZeroMQ (PUB)\n"
+	"\t-I <ip_or_host>\t\tZeroMQ bind host/IP (default: 127.0.0.1)\n"
+	"\t-P <port>\t\tZeroMQ bind port (default: 5555)\n"
+	"\t\t\t\tPacket format: [header | IQ payload], header has sequence and timestamp\n"
 
 	"\t-s <serial number>\tOpen device with specified 64bits serial number\n"
 
@@ -423,6 +493,7 @@ int main(int argc, char** argv)
 	uint32_t nsrates;
 	uint32_t *supported_samplerates;
 	uint32_t sample_rate_u32 = 768000;
+	uint32_t zmq_port_u32 = 0;
 
 	struct airspyhf_device* device = 0;
 
@@ -440,7 +511,7 @@ int main(int argc, char** argv)
 
 	bool do_not_use_manual_commands = false;
 
-	while( (opt = getopt(argc, argv, "r:ws:f:a:n:g:l:t:m:dhz")) != EOF )
+	while( (opt = getopt(argc, argv, "r:ws:f:a:n:g:l:t:m:dhzZI:P:")) != EOF )
 	{
 		result = AIRSPYHF_SUCCESS;
 		switch( opt )
@@ -448,10 +519,33 @@ int main(int argc, char** argv)
 			case 'r':
 				receive = true;
 				path = optarg;
+				use_zmq_output = false;
+			break;
+
+			case 'Z':
+				use_zmq_output = true;
+			break;
+
+			case 'I':
+				if (snprintf(zmq_host, sizeof(zmq_host), "%s", optarg) >= (int)sizeof(zmq_host)) {
+					fprintf(stderr, "argument error: '-%c %s'\n", opt, optarg);
+					goto exit_usage;
+				}
+			break;
+
+			case 'P':
+				result = parse_u32(optarg, &zmq_port_u32);
+				if ((result == AIRSPYHF_SUCCESS) && ((zmq_port_u32 < 1) || (zmq_port_u32 > 65535))) {
+					result = AIRSPYHF_ERROR;
+				}
+				if (result == AIRSPYHF_SUCCESS) {
+					zmq_port = (uint16_t)zmq_port_u32;
+				}
 			break;
 
 			case 'w':
 				receive_wav = true;
+				use_zmq_output = false;
 			 break;
 
 			case 's':
@@ -569,7 +663,12 @@ int main(int argc, char** argv)
 		fprintf(stderr, "Receive wav file: [%s]\n", path);
 	}
 
-	if( path == 0 ) {
+	if ((receive_wav == true) && (use_zmq_output == true)) {
+		fprintf(stderr, "error: -w cannot be used together with -Z\n");
+		goto exit_usage;
+	}
+
+	if ((path == 0) && (use_zmq_output == false)) {
 		fprintf(stderr, "error: you shall specify at least -r <with filename> or -w option\n");
 		goto exit_usage;
 	}
@@ -579,7 +678,7 @@ int main(int argc, char** argv)
 		uint32_t serial_number_msb_val;
 		uint32_t serial_number_lsb_val;
 
-		fprintf(stderr, "airspyhf_rx\n");
+		fprintf(stderr, "airspyhf_zeromq_rx\n");
 		serial_number_msb_val = (uint32_t)(serial_number_val >> 32);
 		serial_number_lsb_val = (uint32_t)(serial_number_val & 0xFFFFFFFF);
 		if(serial_number)
@@ -635,6 +734,7 @@ int main(int argc, char** argv)
 		fprintf(stderr, "airspyhf_set_samplerate() failed: %d\n", wav_sample_per_sec);
 		goto exit_failure;
 	}
+	current_sample_rate = wav_sample_per_sec;
 
 	if (verbose) {
 		fprintf(stderr, "%f MS/s %s\n", wav_sample_per_sec * 0.000001f, "IQ");
@@ -694,24 +794,55 @@ int main(int argc, char** argv)
 		}
 	}
 
-	// output file management
-	if (strcmp (path, "stdout") == 0) {
-		fd = stdout;
-	} else {
-		if( !(fd = fopen(path, "wb")) ) {
-			perror (path);
+	if (use_zmq_output) {
+		char zmq_endpoint[256];
+		int zmq_sndhwm = 32;
+
+		snprintf(zmq_endpoint, sizeof(zmq_endpoint), "tcp://%s:%u", zmq_host, zmq_port);
+
+		zmq_context = zmq_ctx_new();
+		if (zmq_context == NULL) {
+			fprintf(stderr, "zmq_ctx_new() failed: %s\n", zmq_strerror(errno));
 			goto exit_failure;
 		}
-	}
 
-	/* Change fd buffer to have bigger one to store data to file */
-	if( setvbuf(fd , NULL , _IOFBF , FD_BUFFER_SIZE) != 0 ) {
-		perror("setvbuf() failed:");
-		goto exit_failure;
-	}
+		zmq_pub_socket = zmq_socket(zmq_context, ZMQ_PUB);
+		if (zmq_pub_socket == NULL) {
+			fprintf(stderr, "zmq_socket() failed: %s\n", zmq_strerror(errno));
+			goto exit_failure;
+		}
 
-	/* Write Wav header */
-	if( receive_wav ) fwrite(&wave_file_hdr, 1, sizeof(t_wav_file_hdr), fd);
+		if (zmq_setsockopt(zmq_pub_socket, ZMQ_SNDHWM, &zmq_sndhwm, sizeof(zmq_sndhwm)) != 0) {
+			fprintf(stderr, "zmq_setsockopt(ZMQ_SNDHWM) failed: %s\n", zmq_strerror(errno));
+			goto exit_failure;
+		}
+
+		if (zmq_bind(zmq_pub_socket, zmq_endpoint) != 0) {
+			fprintf(stderr, "zmq_bind(%s) failed: %s\n", zmq_endpoint, zmq_strerror(errno));
+			goto exit_failure;
+		}
+
+		fprintf(stderr, "ZeroMQ PUB output bound at %s\n", zmq_endpoint);
+	} else {
+		// output file management
+		if (strcmp (path, "stdout") == 0) {
+			fd = stdout;
+		} else {
+			if( !(fd = fopen(path, "wb")) ) {
+				perror (path);
+				goto exit_failure;
+			}
+		}
+
+		/* Change fd buffer to have bigger one to store data to file */
+		if( setvbuf(fd , NULL , _IOFBF , FD_BUFFER_SIZE) != 0 ) {
+			perror("setvbuf() failed:");
+			goto exit_failure;
+		}
+
+		/* Write Wav header */
+		if( receive_wav ) fwrite(&wave_file_hdr, 1, sizeof(t_wav_file_hdr), fd);
+	}
 
 
 #ifdef _MSC_VER
@@ -805,11 +936,16 @@ int main(int argc, char** argv)
 			rewind(fd);
 			fwrite(&wave_file_hdr, 1, sizeof(t_wav_file_hdr), fd);
 	}
-	if (fd != stdout) fclose(fd);
+	if (fd && fd != stdout) fclose(fd);
+	if (zmq_pub_socket) zmq_close(zmq_pub_socket);
+	if (zmq_context) zmq_ctx_term(zmq_context);
 	fprintf(stderr, "done\n");
 	return EXIT_SUCCESS;
 
 exit_failure:
+	if (zmq_pub_socket) zmq_close(zmq_pub_socket);
+	if (zmq_context) zmq_ctx_term(zmq_context);
+	if (fd && fd != stdout) fclose(fd);
 	airspyhf_close(device);
 	return EXIT_FAILURE;
 

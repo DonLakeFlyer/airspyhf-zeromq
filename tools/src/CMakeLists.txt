@@ -30,20 +30,12 @@ add_library(libgetopt_static STATIC
 )
 endif()
 
-add_executable(airspyhf_lib_version airspyhf_lib_version.c)
-install(TARGETS airspyhf_lib_version RUNTIME DESTINATION ${INSTALL_DEFAULT_BINDIR})
+add_executable(airspyhf_zeromq_rx airspyhf_rx.c)
+install(TARGETS airspyhf_zeromq_rx RUNTIME DESTINATION ${INSTALL_DEFAULT_BINDIR})
 
-add_executable(airspyhf_info airspyhf_info.c)
-install(TARGETS airspyhf_info RUNTIME DESTINATION ${INSTALL_DEFAULT_BINDIR})
-
-add_executable(airspyhf_rx airspyhf_rx.c)
-install(TARGETS airspyhf_rx RUNTIME DESTINATION ${INSTALL_DEFAULT_BINDIR})
-
-add_executable(airspyhf_gpio airspyhf_gpio.c)
-install(TARGETS airspyhf_gpio RUNTIME DESTINATION ${INSTALL_DEFAULT_BINDIR})
-
-add_executable(airspyhf_calibrate airspyhf_calibrate.c)
-install(TARGETS airspyhf_calibrate RUNTIME DESTINATION ${INSTALL_DEFAULT_BINDIR})
+set_target_properties(airspyhf_zeromq_rx PROPERTIES
+    INSTALL_RPATH_USE_LINK_PATH TRUE
+)
 
 if(NOT libairspyhf_SOURCE_DIR)
 include_directories(${LIBAIRSPYHF_INCLUDE_DIR})
@@ -58,8 +50,5 @@ endif()
 
 LIST(APPEND TOOLS_LINK_LIBS -lm)
 
-target_link_libraries(airspyhf_lib_version ${TOOLS_LINK_LIBS})
-target_link_libraries(airspyhf_info ${TOOLS_LINK_LIBS})
-target_link_libraries(airspyhf_rx ${TOOLS_LINK_LIBS})
-target_link_libraries(airspyhf_gpio ${TOOLS_LINK_LIBS})
-target_link_libraries(airspyhf_calibrate ${TOOLS_LINK_LIBS})
+target_link_libraries(airspyhf_zeromq_rx ${TOOLS_LINK_LIBS})
+target_link_libraries(airspyhf_zeromq_rx ${PC_ZMQ_LDFLAGS})

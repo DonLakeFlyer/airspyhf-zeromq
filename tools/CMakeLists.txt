@@ -47,6 +47,11 @@ else()
 include_directories(${libairspyhf_SOURCE_DIR}/src)
 endif()
 
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(PC_ZMQ REQUIRED libzmq)
+include_directories(${PC_ZMQ_INCLUDE_DIRS})
+add_definitions(${PC_ZMQ_CFLAGS_OTHER})
+
 add_subdirectory(src)
 
 ########################################################################
@@ -70,7 +75,7 @@ endif()
 ########################################################################
 set(REMOTE_USER_GROUP "plugdev")
 set(RULE_TEXT "ATTR{idVendor}==\"03eb\", ATTR{idProduct}==\"800c\", SYMLINK+=\"airspyhf-%k\", MODE=\"660\", GROUP=\"${REMOTE_USER_GROUP}\"")
-option(USE_UACCESS_RULES "Install udev uaccess rules" OFF)
+option(USE_UACCESS_RULES "Install udev uaccess rules" ON)
 option(INSTALL_UDEV_RULES "Install udev rules for AirSpy HF+" OFF)
 
 if (USE_UACCESS_RULES)

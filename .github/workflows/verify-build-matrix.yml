@@ -1,0 +1,42 @@
+name: Verify Build Matrix
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: Ubuntu (udev rules)
+            cmake_args: -DINSTALL_UDEV_RULES=ON
+            install_deps: |
+              sudo apt-get update
+              sudo apt-get install -y build-essential cmake libusb-1.0-0-dev libzmq3-dev pkg-config
+          - os: macos-latest
+            name: macOS
+            cmake_args: ""
+            install_deps: |
+              brew update
+              brew install libusb zeromq pkg-config
+
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: ${{ matrix.install_deps }}
+
+      - name: Configure
+        run: cmake -S . -B build-ci ${{ matrix.cmake_args }}
+
+      - name: Build
+        run: cmake --build build-ci --parallel

@@ -3,13 +3,19 @@
 cmake_minimum_required(VERSION 3.12)
 project (airspyhf_all)
 
+include(CTest)
+
 #provide missing strtoull() for VC11
 if(MSVC11)
     add_definitions(-Dstrtoull=_strtoui64)
 endif(MSVC11)
 
-add_subdirectory(libairspyhf)
+message(STATUS "Using system libairspyhf")
 add_subdirectory(tools)
+
+if(BUILD_TESTING)
+    add_subdirectory(tests)
+endif()
 ########################################################################
 # Create uninstall target
 ########################################################################
