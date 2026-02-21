@@ -2,7 +2,7 @@ name: Verify Build Matrix
 
 on:
   push:
-    branches: ["main"]
+    branches: ["master", "main"]
   pull_request:
   workflow_dispatch:
 
